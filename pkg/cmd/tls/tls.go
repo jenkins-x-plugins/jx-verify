@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff"
-	"github.com/jenkins-x/jx-logging/v3/pkg/log"
 	"github.com/jenkins-x-plugins/jx-verify/pkg/rootcmd"
+	"github.com/jenkins-x/jx-logging/v3/pkg/log"
 
 	"github.com/pkg/errors"
 
@@ -24,13 +24,13 @@ var (
 
 	cmdExample = templates.Examples(`
 		# verifies a TLS certificate issuer and subject
-		%s step verify tls hook.foo.bar.com --insecure --issuer 'CN=Fake LE Intermediate X1' --subject 'CN=*.foo.bar.com'
+		%s step verify tls hook.foo.bar.com --insecure --issuer 'CN=(STAGING) Artificial Apricot R3' --subject 'CN=*.foo.bar.com'
 	`)
 )
 
 const (
-	CertificateIssuerFakeLE = "Fake LE Intermediate X1"
-	CertificateIssuerProdLE = "Let's Encrypt Authority X3"
+	CertificateIssuerFakeLE = "(STAGING) Artificial Apricot R3"
+	CertificateIssuerProdLE = "R3"
 )
 
 // Options the options for verifying TLS certs
@@ -70,9 +70,7 @@ func (o *Options) Run(args []string) error {
 	}
 
 	err := retry(o.timeout, func() error {
-
 		return o.verifyCert(args)
-
 	}, func(e error, d time.Duration) {
 		log.Logger().Infof("resolution failed, backing of for %s", d)
 	})
@@ -116,5 +114,4 @@ func retry(maxElapsedTime time.Duration, f func() error, n func(error, time.Dura
 	bo.MaxInterval = 10 * time.Second
 	bo.Reset()
 	return backoff.RetryNotify(f, bo, n)
-
 }

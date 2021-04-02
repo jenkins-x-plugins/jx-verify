@@ -5,7 +5,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ template "verifyJob.name" . }}
+  name: {{ template "verifyJob.saName" . }}
 subjects:
 - kind: ServiceAccount
-  name: {{ template "verifyJob.name" . }}
+  name: {{ template "verifyJob.saName" . }}

@@ -12,6 +12,11 @@ spec:
   completions: 1
   parallelism: 1
   template:
+    metadata:
+{{- if .Values.verifyJob.podAnnotations }}
+      annotations:
+{{ toYaml .Values.verifyJob.podAnnotations | indent 8 }}
+{{- end }}
     spec:
       containers:
       - command:
@@ -27,4 +32,4 @@ spec:
       restartPolicy: Never
       schedulerName: default-scheduler
       terminationGracePeriodSeconds: 30
-      serviceAccountName: {{ template "verifyJob.name" . }}
+      serviceAccountName: {{ template "verifyJob.saName" . }}

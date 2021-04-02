@@ -3,7 +3,6 @@ package job
 import (
 	"context"
 	"fmt"
-	"github.com/jenkins-x/jx-helpers/v3/pkg/stringhelpers"
 	"io"
 	"os"
 	"sort"
@@ -19,6 +18,7 @@ import (
 	"github.com/jenkins-x/jx-helpers/v3/pkg/kube/podlogs"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/kube/pods"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/options"
+	"github.com/jenkins-x/jx-helpers/v3/pkg/stringhelpers"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/termcolor"
 	"github.com/jenkins-x/jx-kube-client/v3/pkg/kubeclient"
 	logger "github.com/jenkins-x/jx-logging/v3/pkg/log"
@@ -153,7 +153,7 @@ func (o *Options) handleErrorReporting(err error) error {
 	return nil
 }
 
-func (o *Options) viewActiveJobLog(client kubernetes.Interface, ns string, selector string, jobName string) error {
+func (o *Options) viewActiveJobLog(client kubernetes.Interface, ns, selector, jobName string) error {
 	var foundPods []string
 	logger.Logger().Infof("waiting for a running pod in namespace %s with selector %s", info(ns), info(selector))
 	for {
@@ -163,7 +163,7 @@ func (o *Options) viewActiveJobLog(client kubernetes.Interface, ns string, selec
 		}
 		if complete {
 			if o.VerifyResult {
-				return o.verifyResultInLastPod(client, ns, selector, jobName)
+				return o.verifyResultInLastPod(client, ns, selector)
 			}
 			return nil
 		}
@@ -248,26 +248,6 @@ func (o *Options) Validate() error {
 	return nil
 }
 
-func (o *Options) waitForLatestJob(client kubernetes.Interface, ns, selector string) (*batchv1.Job, error) {
-	for {
-		job, err := o.getLatestJob(client, ns, selector)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to ")
-		}
-
-		if job != nil {
-			if !jobs.IsJobFinished(job) {
-				return job, nil
-			}
-		}
-
-		if time.Now().After(o.timeEnd) {
-			return nil, errors.Errorf("timed out after waiting for duration %s", o.Duration.String())
-		}
-		time.Sleep(o.PollPeriod)
-	}
-}
-
 func (o *Options) waitForJobToExist(client kubernetes.Interface, ns, jobName string) (*batchv1.Job, error) {
 	logged := false
 
@@ -292,7 +272,7 @@ func (o *Options) waitForJobToExist(client kubernetes.Interface, ns, jobName str
 	}
 }
 
-func (o *Options) verifyResultInLastPod(client kubernetes.Interface, ns string, selector string, name string) error {
+func (o *Options) verifyResultInLastPod(client kubernetes.Interface, ns, selector string) error {
 	opts := metav1.ListOptions{
 		LabelSelector: selector,
 	}
@@ -329,15 +309,16 @@ func (o *Options) verifyResultInLastPod(client kubernetes.Interface, ns string, 
 	}
 	lines := strings.Split(string(data), "\n")
 	for _, line := range lines {
-		if strings.HasPrefix(line, PodResultPrefix) {
-			remaining := strings.TrimPrefix(line, PodResultPrefix)
-			remaining = strings.TrimSpace(remaining)
-			logger.Logger().Infof("pod %s has result %s", info(pod.Name), info(remaining))
-			if remaining == PodResultOK {
-				return nil
-			}
-			return errors.Errorf("pod %s %s", pod.Name, remaining)
+		if !strings.HasPrefix(line, PodResultPrefix) {
+			continue
 		}
+		remaining := strings.TrimPrefix(line, PodResultPrefix)
+		remaining = strings.TrimSpace(remaining)
+		logger.Logger().Infof("pod %s has result %s", info(pod.Name), info(remaining))
+		if remaining == PodResultOK {
+			return nil
+		}
+		return errors.Errorf("pod %s %s", pod.Name, remaining)
 	}
 	return errors.Errorf("pod %s did not output expected line: %s", pod.Name, PodResultPrefix)
 }
@@ -381,28 +362,6 @@ func (o *Options) waitForJobCompleteOrPodRunning(client kubernetes.Interface, ns
 	}
 }
 
-func (o *Options) getLatestJob(client kubernetes.Interface, ns, selector string) (*batchv1.Job, error) {
-	jobList, err := client.BatchV1().Jobs(ns).List(context.TODO(), metav1.ListOptions{
-		LabelSelector: selector,
-	})
-	if err != nil && !apierrors.IsNotFound(err) {
-		return nil, errors.Wrapf(err, "failed to list jobList in namespace %s selector %s", ns, selector)
-	}
-	if len(jobList.Items) == 0 {
-		return nil, nil
-	}
-
-	// lets find the newest job...
-	latest := jobList.Items[0]
-	for i := 1; i < len(jobList.Items); i++ {
-		job := jobList.Items[i]
-		if job.CreationTimestamp.After(latest.CreationTimestamp.Time) {
-			latest = job
-		}
-	}
-	return &latest, nil
-}
-
 func (o *Options) checkIfJobComplete(client kubernetes.Interface, ns, name string) (bool, *batchv1.Job, error) {
 	job, err := client.BatchV1().Jobs(ns).Get(context.TODO(), name, metav1.GetOptions{})
 	if job == nil || err != nil {
@@ -420,7 +379,7 @@ func (o *Options) checkIfJobComplete(client kubernetes.Interface, ns, name strin
 	return false, job, nil
 }
 
-func (o *Options) pickJobToLog(client kubernetes.Interface, ns string, selector string, jobs []batchv1.Job) error {
+func (o *Options) pickJobToLog(client kubernetes.Interface, ns, selector string, jobs []batchv1.Job) error {
 	var names []string
 	m := map[string]*batchv1.Job{}
 	for i := range jobs {
@@ -441,12 +400,12 @@ func (o *Options) pickJobToLog(client kubernetes.Interface, ns string, selector 
 }
 
 func toJobName(j *batchv1.Job, number int) string {
-	status := JobStatus(j)
-	d := time.Now().Sub(j.CreationTimestamp.Time).Round(time.Minute)
+	status := jobStatus(j)
+	d := time.Since(j.CreationTimestamp.Time).Round(time.Minute)
 	return fmt.Sprintf("#%d started %s %s", number, d.String(), status)
 }
 
-func JobStatus(j *batchv1.Job) string {
+func jobStatus(j *batchv1.Job) string {
 	if jobs.IsJobSucceeded(j) {
 		return "Succeeded"
 	}
@@ -472,7 +431,7 @@ func verifyContainerName(pod *corev1.Pod, name string) error {
 }
 
 // GetSortedJobs gets the jobs with an optional commit sha filter
-func GetSortedJobs(client kubernetes.Interface, ns string, selector string, fieldSelector string) ([]batchv1.Job, error) {
+func GetSortedJobs(client kubernetes.Interface, ns, selector, fieldSelector string) ([]batchv1.Job, error) {
 	jobList, err := client.BatchV1().Jobs(ns).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: selector,
 		FieldSelector: fieldSelector,

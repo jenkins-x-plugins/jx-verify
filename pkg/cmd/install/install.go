@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jenkins-x-plugins/jx-verify/pkg/rootcmd"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/builds"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cmdrunner"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/helper"
@@ -17,7 +18,6 @@ import (
 	"github.com/jenkins-x/jx-helpers/v3/pkg/options"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/table"
 	"github.com/jenkins-x/jx-logging/v3/pkg/log"
-	"github.com/jenkins-x-plugins/jx-verify/pkg/rootcmd"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
@@ -43,6 +43,7 @@ type Options struct {
 	KubeClient       kubernetes.Interface
 	Namespace        string
 	IncludeBuildPods bool
+	CustomSelector   string
 	WaitDuration     time.Duration
 	PollPeriod       time.Duration
 	Out              io.Writer
@@ -66,6 +67,7 @@ func NewCmdVerifyInstall() (*cobra.Command, *Options) {
 	cmd.Flags().DurationVarP(&o.WaitDuration, "pod-wait-time", "w", 2*time.Minute, "The default wait time to wait for the pods to be ready")
 	cmd.Flags().DurationVarP(&o.PollPeriod, "poll", "p", 10*time.Second, "The period between polls")
 	cmd.Flags().BoolVarP(&o.IncludeBuildPods, "include-build", "", false, "Include build pods")
+	cmd.Flags().StringVarP(&o.CustomSelector, "selector", "l", "", "Custom selector (label query) for pods")
 
 	o.BaseOptions.AddBaseFlags(cmd)
 	return cmd, o
@@ -128,7 +130,11 @@ func (o *Options) waitForReadyPods(kubeClient kubernetes.Interface, ns string) (
 	tbl := table.CreateTable(o.Out)
 
 	var listOptions metav1.ListOptions
-	if o.IncludeBuildPods {
+	if o.CustomSelector != "" {
+		listOptions = metav1.ListOptions{
+			LabelSelector: o.CustomSelector,
+		}
+	} else if o.IncludeBuildPods {
 		listOptions = metav1.ListOptions{}
 	} else {
 		listOptions = metav1.ListOptions{
@@ -159,8 +165,8 @@ func (o *Options) waitForReadyPods(kubeClient kubernetes.Interface, ns string) (
 
 	notReadyPhases := map[string][]string{}
 
-	for _, p := range podList.Items {
-		pod := p
+	for k := range podList.Items {
+		pod := podList.Items[k]
 		podName := pod.ObjectMeta.Name
 		phase := pod.Status.Phase
 

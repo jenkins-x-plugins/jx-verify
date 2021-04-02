@@ -14,5 +14,10 @@ We truncate at 63 chars because some Kubernetes name fields are limited to this 
 
 {{- define "verifyJob.name" -}}
 {{- $name := default "gc-jobs" .Values.verifyJob.nameOverride -}}
+{{- printf "%s-%s-%s" .Chart.Name $name (lower (randAlphaNum 5)) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "verifyJob.saName" -}}
+{{- $name := default "gc-jobs" .Values.verifyJob.nameOverride -}}
 {{- printf "%s-%s" .Chart.Name $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
