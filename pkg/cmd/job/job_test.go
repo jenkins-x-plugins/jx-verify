@@ -1,9 +1,10 @@
 package job_test
 
 import (
+	"testing"
+
 	"github.com/jenkins-x-plugins/jx-verify/pkg/cmd/job"
 	"k8s.io/client-go/kubernetes/fake"
-	"testing"
 )
 
 func TestVerifyJob(t *testing.T) {

@@ -165,8 +165,8 @@ func (o *Options) waitForReadyPods(kubeClient kubernetes.Interface, ns string) (
 
 	notReadyPhases := map[string][]string{}
 
-	for _, p := range podList.Items {
-		pod := p
+	for k := range podList.Items {
+		pod := podList.Items[k]
 		podName := pod.ObjectMeta.Name
 		phase := pod.Status.Phase
 
