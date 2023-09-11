@@ -1,26 +1,18 @@
 image:
   # image.parentRepository -- Docker registry to pull images from
   parentRepository: gcr.io/jenkinsxio
-
-  repository: gcr.io/jenkinsxio/jx-verify
-
+  repository: ghcr.io/jenkins-x/jx-verify
   # image.tag -- Docker images tag
-  tag: 0.0.52
-
+  tag: 0.3.7
   # image.pullPolicy -- Image pull policy
   pullPolicy: IfNotPresent
-
 verifyJob:
   # verifyJob.failedJobsHistoryLimit -- Drives the failed jobs history limit
   failedJobsHistoryLimit: 1
-
   # verifyJob.successfulJobsHistoryLimit -- Drives the successful jobs history limit
   successfulJobsHistoryLimit: 3
-
   # verifyJob.concurrencyPolicy -- Drives the job's concurrency policy
   concurrencyPolicy: Forbid
-
 jx:
   # whether to create a Release CRD when installing charts with Release CRDs included
   releaseCRD: true
-
