@@ -1,6 +1,6 @@
 module github.com/jenkins-x-plugins/jx-verify
 
-go 1.18
+go 1.19
 
 require (
 	github.com/cenkalti/backoff v2.2.1+incompatible
