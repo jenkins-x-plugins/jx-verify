@@ -11,7 +11,6 @@ import (
 	"github.com/jenkins-x/jx-helpers/v3/pkg/termcolor"
 	"github.com/jenkins-x/jx-logging/v3/pkg/log"
 
-	"github.com/pkg/errors"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/spf13/cobra"
 )
@@ -43,7 +42,7 @@ func NewCmdVerifyContext() (*cobra.Command, *Options) {
 		Long:    cmdLong,
 		Aliases: []string{"ctx"},
 		Example: fmt.Sprintf(cmdExample, rootcmd.BinaryName),
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, _ []string) {
 			err := o.Run()
 			helper.CheckErr(err)
 		},
@@ -59,7 +58,7 @@ func (o *Options) Run() error {
 	}
 	cfg, _, err := kube.LoadConfig()
 	if err != nil {
-		return errors.Wrap(err, "failed to load kubernetes config")
+		return fmt.Errorf("failed to load kubernetes config: %w", err)
 	}
 
 	contextName := kube.Cluster(cfg)
@@ -77,5 +76,5 @@ func (o *Options) Run() error {
 	log.Logger().Warnf("expected kubernetes context: '%s' but was: '%s'", o.Context, contextName)
 	log.Logger().Infof("\ndifference: %s\n\n", dmp.DiffPrettyText(diffs))
 
-	return errors.Errorf("expected kubernetes context: %s but was %s", o.Context, contextName)
+	return fmt.Errorf("expected kubernetes context: %s but was %s", o.Context, contextName)
 }

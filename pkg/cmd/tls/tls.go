@@ -1,14 +1,13 @@
 package tls
 
 import (
+	"context"
 	"fmt"
 	"time"
 
-	"github.com/cenkalti/backoff"
+	"github.com/cenkalti/backoff/v5"
 	"github.com/jenkins-x-plugins/jx-verify/pkg/rootcmd"
 	"github.com/jenkins-x/jx-logging/v3/pkg/log"
-
-	"github.com/pkg/errors"
 
 	"github.com/genkiroid/cert"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/helper"
@@ -50,7 +49,7 @@ func NewCmdVerifyTLS() (*cobra.Command, *Options) {
 		Short:   "Verifies TLS for a Cluster",
 		Long:    cmdLong,
 		Example: fmt.Sprintf(cmdExample, rootcmd.BinaryName),
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, args []string) {
 			err := o.Run(args)
 			helper.CheckErr(err)
 		},
@@ -66,26 +65,26 @@ func NewCmdVerifyTLS() (*cobra.Command, *Options) {
 // Run implements the command
 func (o *Options) Run(args []string) error {
 	if len(args) != 1 {
-		return errors.Errorf("domain command argument not specified")
+		return fmt.Errorf("domain command argument not specified")
 	}
 
-	err := retry(o.timeout, func() error {
+	_, err := retry(o.timeout, func() (string, error) {
 		return o.verifyCert(args)
 	}, func(e error, d time.Duration) {
-		log.Logger().Infof("resolution failed, backing of for %s", d)
+		log.Logger().Infof("resolution failed (%s), backing of for %s", e, d)
 	})
 	if err != nil {
-		return errors.Wrap(err, "unable to resolve TLS, check certmanager Issuer and Certificate resources are Ready.  kubectl get issuer,certificate")
+		return fmt.Errorf("unable to resolve TLS, check certmanager Issuer and Certificate resources are Ready.  kubectl get issuer,certificate: %w", err)
 	}
 
 	return nil
 }
 
-func (o *Options) verifyCert(args []string) error {
+func (o *Options) verifyCert(args []string) (string, error) {
 	cert.SkipVerify = !o.production
 	certs, err := cert.NewCerts(args)
 	if err != nil {
-		return errors.Wrapf(err, "failed to get domain [%s] certificate information", args[0])
+		return "", fmt.Errorf("failed to get domain [%s] certificate information: %w", args[0], err)
 	}
 
 	issuer := o.issuer
@@ -100,18 +99,17 @@ func (o *Options) verifyCert(args []string) error {
 	for _, certificate := range certs {
 		if certificate.Issuer == issuer {
 			log.Logger().Infof("matched issuer %s", issuer)
-			return nil
+			return issuer, nil
 		}
 	}
-	return fmt.Errorf("no matching issuer %s found", issuer)
+	return issuer, fmt.Errorf("no matching issuer %s found", issuer)
 }
 
 // retry retries with exponential backoff the given function
-func retry(maxElapsedTime time.Duration, f func() error, n func(error, time.Duration)) error {
+func retry[T any](maxElapsedTime time.Duration, f backoff.Operation[T], n func(error, time.Duration)) (T, error) {
 	bo := backoff.NewExponentialBackOff()
-	bo.MaxElapsedTime = maxElapsedTime
 	bo.InitialInterval = 2 * time.Second
 	bo.MaxInterval = 10 * time.Second
 	bo.Reset()
-	return backoff.RetryNotify(f, bo, n)
+	return backoff.Retry(context.TODO(), f, backoff.WithBackOff(bo), backoff.WithNotify(n), backoff.WithMaxElapsedTime(maxElapsedTime))
 }

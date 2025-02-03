@@ -18,7 +18,7 @@ import (
 	"github.com/jenkins-x/jx-helpers/v3/pkg/options"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/table"
 	"github.com/jenkins-x/jx-logging/v3/pkg/log"
-	"github.com/pkg/errors"
+
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -58,7 +58,7 @@ func NewCmdVerifyInstall() (*cobra.Command, *Options) {
 		Short:   "Verifies the installation is ready",
 		Long:    cmdLong,
 		Example: fmt.Sprintf(cmdExample, rootcmd.BinaryName),
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, _ []string) {
 			err := o.Run()
 			helper.CheckErr(err)
 		},
@@ -78,7 +78,7 @@ func (o *Options) Validate() error {
 	var err error
 	o.KubeClient, o.Namespace, err = kube.LazyCreateKubeClientAndNamespace(o.KubeClient, o.Namespace)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create kubernetes client")
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 	if o.Out == nil {
 		o.Out = os.Stdout
@@ -93,7 +93,7 @@ func (o *Options) Validate() error {
 func (o *Options) Run() error {
 	err := o.Validate()
 	if err != nil {
-		return errors.Wrapf(err, "failed to validate options")
+		return fmt.Errorf("failed to validate options: %w", err)
 	}
 
 	log.Logger().Infof("Checking pod statuses")
@@ -115,7 +115,7 @@ func (o *Options) Run() error {
 
 		if time.Now().After(end) {
 			table.Render()
-			return errors.Wrapf(err, "timed out after waiting %s for the pods to become ready", o.WaitDuration.String())
+			return fmt.Errorf("timed out after waiting %s for the pods to become ready: %w", o.WaitDuration.String(), err)
 		}
 
 		if !logWaiting {
@@ -145,7 +145,7 @@ func (o *Options) waitForReadyPods(kubeClient kubernetes.Interface, ns string) (
 	ctx := context.Background()
 	podList, err := kubeClient.CoreV1().Pods(ns).List(ctx, listOptions)
 	if err != nil {
-		return tbl, errors.Wrapf(err, "failed to list the PODs in namespace '%s'", ns)
+		return tbl, fmt.Errorf("failed to list the PODs in namespace '%s': %w", ns, err)
 	}
 
 	tbl.AddRow("POD", "STATUS")
@@ -156,7 +156,7 @@ func (o *Options) waitForReadyPods(kubeClient kubernetes.Interface, ns string) (
 		log.Logger().Infof("Creating verify-pod.log file")
 		f, err = os.Create("verify-pod.log")
 		if err != nil {
-			return tbl, errors.Wrap(err, "error creating log file")
+			return tbl, fmt.Errorf("error creating log file: %w", err)
 		}
 		defer f.Close()
 	}
@@ -177,15 +177,17 @@ func (o *Options) waitForReadyPods(kubeClient kubernetes.Interface, ns string) (
 			}
 			text, err := o.CommandRunner(c)
 			if err != nil {
-				return tbl, errors.Wrap(err, "failed to get the Kube pod logs")
+				return tbl, fmt.Errorf("failed to get the Kube pod logs: %w", err)
 			}
-			_, err = f.WriteString(fmt.Sprintf("Logs for pod %s:\n", podName))
-			if err != nil {
-				return tbl, errors.Wrap(err, "error writing log file")
-			}
-			_, err = f.WriteString(text)
-			if err != nil {
-				return tbl, errors.Wrap(err, "error writing log file")
+			if f != nil {
+				_, err = fmt.Fprintf(f, "Logs for pod %s:\n", podName)
+				if err != nil {
+					return tbl, fmt.Errorf("error writing log file: %w", err)
+				}
+				_, err = f.WriteString(text)
+				if err != nil {
+					return tbl, fmt.Errorf("error writing log file: %w", err)
+				}
 			}
 		}
 		tbl.AddRow(podName, string(phase))
