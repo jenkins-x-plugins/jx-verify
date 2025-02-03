@@ -14,7 +14,7 @@ import (
 	"github.com/jenkins-x/jx-helpers/v3/pkg/kube"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/termcolor"
 	"github.com/jenkins-x/jx-logging/v3/pkg/log"
-	"github.com/pkg/errors"
+
 	"github.com/spf13/cobra"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,7 +55,7 @@ func NewCmdVerifyIngress() (*cobra.Command, *Options) {
 		Short:   "Verifies the ingress configuration defaulting the ingress domain if necessary",
 		Long:    cmdLong,
 		Example: cmdExample,
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, _ []string) {
 			err := o.Run()
 			helper.CheckErr(err)
 		},
@@ -90,12 +90,12 @@ func (o *Options) Run() error {
 
 	o.KubeClient, err = kube.LazyCreateKubeClient(o.KubeClient)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create kubernetes client")
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
 	requirementsResource, requirementsFileName, err := jxcore.LoadRequirementsConfig(o.Dir, false)
 	if err != nil {
-		return errors.Wrapf(err, "failed to load Jenkins X requirements")
+		return fmt.Errorf("failed to load Jenkins X requirements: %w", err)
 	}
 	requirements := &requirementsResource.Spec
 
@@ -111,7 +111,7 @@ func (o *Options) Run() error {
 		}
 		_, err = mail.ParseAddress(requirements.Ingress.TLS.Email)
 		if err != nil {
-			return errors.Wrap(err, "You must provide a valid email address to enable TLS so you can receive notifications from LetsEncrypt about your certificates")
+			return fmt.Errorf("You must provide a valid email address to enable TLS so you can receive notifications from LetsEncrypt about your certificates: %w", err)
 		}
 	}
 
@@ -140,20 +140,20 @@ func (o *Options) discoverIngressDomain(requirements *jxcore.RequirementsConfig,
 		o.IngressNamespace,
 		o.IngressService)
 	if err != nil {
-		return errors.Wrapf(err, "getting a domain for ingress service %s/%s", o.IngressNamespace, o.IngressService)
+		return fmt.Errorf("getting a domain for ingress service %s/%s: %w", o.IngressNamespace, o.IngressService, err)
 	}
 	if domain == "" {
 		// TODO - Shouldn't we always check/wait for ingress controller to verify domain - feels like safer/stronger verification
 		hasHost, err := waitForIngressControllerHost(client, o.IngressNamespace, o.IngressService)
 		if err != nil {
-			return errors.Wrapf(err, "getting a domain for ingress service %s/%s", o.IngressNamespace, o.IngressService)
+			return fmt.Errorf("getting a domain for ingress service %s/%s: %w", o.IngressNamespace, o.IngressService, err)
 		}
 		if hasHost {
 			domain, err = getDomain(client, "",
 				o.IngressNamespace,
 				o.IngressService)
 			if err != nil {
-				return errors.Wrapf(err, "getting a domain for ingress service %s/%s", o.IngressNamespace, o.IngressService)
+				return fmt.Errorf("getting a domain for ingress service %s/%s: %w", o.IngressNamespace, o.IngressService, err)
 			}
 		} else {
 			log.Logger().Warnf("could not find host for  ingress service %s/%s\n", o.IngressNamespace, o.IngressService)
@@ -298,17 +298,18 @@ func getDomain(client kubernetes.Interface, domain, ingressNamespace, ingressSer
 }
 
 // retryQuiet executes a given function call with retry when an error occurs without printing any logs
-func retryQuiet(attempts int, sleep time.Duration, call func() error) (err error) {
+func retryQuiet(attempts int, sleep time.Duration, call func() error) error {
 	lastMessage := ""
 	dot := false
 
+	var err error
 	for i := 0; ; i++ {
-		err = call()
+		err := call()
 		if err == nil {
 			if dot {
 				log.Logger().Info("")
 			}
-			return
+			return nil
 		}
 
 		if i >= (attempts - 1) {
@@ -338,7 +339,7 @@ func (o *Options) Validate() error {
 	var err error
 	o.KubeClient, err = kube.LazyCreateKubeClient(o.KubeClient)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create kube client")
+		return fmt.Errorf("failed to create kube client: %w", err)
 	}
 	return nil
 }
@@ -360,7 +361,7 @@ func verifyDockerRegistry(client kubernetes.Interface, requirements *jxcore.Requ
 
 		svc, err := client.CoreV1().Services(ns).Get(context.TODO(), "docker-registry", metav1.GetOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
-			return errors.Wrapf(err, "failed to list services in namespace %s so we can default the registry host", ns)
+			return fmt.Errorf("failed to list services in namespace %s so we can default the registry host: %w", ns, err)
 		}
 
 		if svc != nil && svc.Spec.ClusterIP != "" {

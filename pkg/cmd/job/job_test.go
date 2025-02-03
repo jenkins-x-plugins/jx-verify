@@ -7,7 +7,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
-func TestVerifyJob(t *testing.T) {
+func TestVerifyJob(_ *testing.T) {
 	ns := "jx"
 	_, o := job.NewCmdVerifyJob()
 	kubeClient := fake.NewSimpleClientset()

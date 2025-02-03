@@ -19,7 +19,7 @@ import (
 	"github.com/jenkins-x/jx-helpers/v3/pkg/cobras/templates"
 	"github.com/jenkins-x/jx-helpers/v3/pkg/kube"
 	"github.com/jenkins-x/jx-logging/v3/pkg/log"
-	"github.com/pkg/errors"
+
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/kubernetes"
 )
@@ -61,7 +61,7 @@ func NewCmdVerifyPods() (*cobra.Command, *Options) {
 		Long:    cmdLong,
 		Aliases: []string{"pod"},
 		Example: fmt.Sprintf(cmdExample, rootcmd.BinaryName),
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, _ []string) {
 			err := o.Run()
 			helper.CheckErr(err)
 		},
@@ -81,7 +81,7 @@ func (o *Options) Run() error {
 	}
 	o.KubeClient, o.Namespace, err = kube.LazyCreateKubeClientAndNamespace(o.KubeClient, o.Namespace)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create kubernetes client")
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
 	o.stop = make(chan struct{})
@@ -96,7 +96,7 @@ func (o *Options) Run() error {
 
 	eventInformer := informerFactory.Core().V1().Events().Informer()
 
-	eventInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, _ = eventInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			e := obj.(*v1.Event)
 			if e == nil {
@@ -106,7 +106,7 @@ func (o *Options) Run() error {
 			o.OnEvent(e, o.Namespace)
 			log.Logger().Debugf("added Event %s", e.Name)
 		},
-		UpdateFunc: func(old, obj interface{}) {
+		UpdateFunc: func(_, obj interface{}) {
 			e := obj.(*v1.Event)
 			if e == nil {
 				log.Logger().Warnf("no Event found for %v", obj)
@@ -119,15 +119,15 @@ func (o *Options) Run() error {
 
 	podInformer := informerFactory.Core().V1().Pods().Informer()
 
-	podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, _ = podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			p := obj.(*v1.Pod)
-			o.OnPod(p, o.Namespace)
+			o.OnPod(p)
 			log.Logger().Debugf("added Pod %s", p.Name)
 		},
-		UpdateFunc: func(old, new interface{}) {
+		UpdateFunc: func(_, new interface{}) {
 			p := new.(*v1.Pod)
-			o.OnPod(p, o.Namespace)
+			o.OnPod(p)
 			log.Logger().Debugf("updated Pod %s", p.Name)
 		},
 	})
@@ -178,7 +178,7 @@ func (o *Options) OnEvent(e *v1.Event, namespace string) {
 	log.Logger().Infof("deleted pod %s in namespace %s", name, ns)
 }
 
-func (o *Options) OnPod(p *v1.Pod, namespace string) {
+func (o *Options) OnPod(p *v1.Pod) {
 	name := p.Name
 	if pods.IsPodReady(p) {
 		o.readyPods[name] = true

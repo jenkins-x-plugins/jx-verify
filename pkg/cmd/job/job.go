@@ -22,7 +22,7 @@ import (
 	"github.com/jenkins-x/jx-helpers/v3/pkg/termcolor"
 	"github.com/jenkins-x/jx-kube-client/v3/pkg/kubeclient"
 	logger "github.com/jenkins-x/jx-logging/v3/pkg/log"
-	"github.com/pkg/errors"
+
 	"github.com/spf13/cobra"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -91,7 +91,7 @@ func NewCmdVerifyJob() (*cobra.Command, *Options) {
 		Aliases: []string{"logs"},
 		Long:    cmdLong,
 		Example: cmdExample,
-		Run: func(command *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, _ []string) {
 			err := options.Run()
 			helper.CheckErr(err)
 		},
@@ -125,7 +125,7 @@ func (o *Options) Run() error {
 		selector = "job-name=" + o.Name
 		_, err = o.waitForJobToExist(client, ns, o.Name)
 		if err != nil {
-			return errors.Wrapf(err, "failed to wait for job %s", o.Name)
+			return fmt.Errorf("failed to wait for job %s: %w", o.Name, err)
 		}
 		err = o.viewActiveJobLog(client, ns, selector, o.Name)
 		return o.handleErrorReporting(err)
@@ -133,7 +133,7 @@ func (o *Options) Run() error {
 
 	jobs, err := GetSortedJobs(client, ns, selector, o.FieldSelector)
 	if err != nil {
-		return errors.Wrapf(err, "failed to get jobs")
+		return fmt.Errorf("failed to get jobs: %w", err)
 	}
 
 	err = o.pickJobToLog(client, ns, selector, jobs)
@@ -168,11 +168,11 @@ func (o *Options) viewActiveJobLog(client kubernetes.Interface, ns, selector, jo
 			return nil
 		}
 		if pod == nil {
-			return errors.Errorf("No pod found for namespace %s with selector %v", ns, selector)
+			return fmt.Errorf("No pod found for namespace %s with selector %v", ns, selector)
 		}
 
 		if time.Now().After(o.timeEnd) {
-			return errors.Errorf("timed out after waiting for duration %s", o.Duration.String())
+			return fmt.Errorf("timed out after waiting for duration %s", o.Duration.String())
 		}
 
 		// lets verify the container name
@@ -196,7 +196,7 @@ func (o *Options) viewActiveJobLog(client kubernetes.Interface, ns, selector, jo
 		}
 		pod, err = client.CoreV1().Pods(ns).Get(context.TODO(), podName, metav1.GetOptions{})
 		if err != nil {
-			return errors.Wrapf(err, "failed to get pod %s in namespace %s", podName, ns)
+			return fmt.Errorf("failed to get pod %s in namespace %s: %w", podName, ns, err)
 		}
 		if pods.IsPodCompleted(pod) {
 			if pods.IsPodSucceeded(pod) {
@@ -233,12 +233,12 @@ func (o *Options) Validate() error {
 	var err error
 	o.KubeClient, err = kube.LazyCreateKubeClientWithMandatory(o.KubeClient, true)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create kubernetes client")
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 	if o.Namespace == "" {
 		o.Namespace, err = kubeclient.CurrentNamespace()
 		if err != nil {
-			return errors.Wrapf(err, "failed to detect current namespace. Try supply --namespace")
+			return fmt.Errorf("failed to detect current namespace. Try supply --namespace: %w", err)
 		}
 	}
 	if o.Input == nil {
@@ -258,7 +258,7 @@ func (o *Options) waitForJobToExist(client kubernetes.Interface, ns, jobName str
 			return job, nil
 		}
 		if err != nil && !apierrors.IsNotFound(err) {
-			return nil, errors.Wrapf(err, "failed to look for job %s in namespace %s", jobName, ns)
+			return nil, fmt.Errorf("failed to look for job %s in namespace %s: %w", jobName, ns, err)
 		}
 
 		if !logged {
@@ -266,7 +266,7 @@ func (o *Options) waitForJobToExist(client kubernetes.Interface, ns, jobName str
 			logger.Logger().Infof("waiting up to %s for the Job %s to be created", o.Duration.String(), info(jobName))
 		}
 		if time.Now().After(o.timeEnd) {
-			return nil, errors.Errorf("timed out after waiting for duration %s", o.Duration.String())
+			return nil, fmt.Errorf("timed out after waiting for duration %s", o.Duration.String())
 		}
 		time.Sleep(o.PollPeriod)
 	}
@@ -283,10 +283,10 @@ func (o *Options) verifyResultInLastPod(client kubernetes.Interface, ns, selecto
 		err = nil
 	}
 	if err != nil {
-		return errors.Wrapf(err, "failed to query ready pod in namespace %s with selector %s", ns, selector)
+		return fmt.Errorf("failed to query ready pod in namespace %s with selector %s: %w", ns, selector, err)
 	}
 	if podList == nil || len(podList.Items) == 0 {
-		return errors.Errorf("no pods found in namespace %s with selector %s", ns, selector)
+		return fmt.Errorf("no pods found in namespace %s with selector %s", ns, selector)
 	}
 	pods := podList.Items
 
@@ -305,7 +305,7 @@ func (o *Options) verifyResultInLastPod(client kubernetes.Interface, ns, selecto
 	}).Do(ctx)
 	data, err := result.Raw()
 	if err != nil {
-		return errors.Wrapf(err, "failed to read logs in namespace %s pod %s", ns, pod.Name)
+		return fmt.Errorf("failed to read logs in namespace %s pod %s: %w", ns, pod.Name, err)
 	}
 	lines := strings.Split(string(data), "\n")
 	for _, line := range lines {
@@ -318,9 +318,9 @@ func (o *Options) verifyResultInLastPod(client kubernetes.Interface, ns, selecto
 		if remaining == PodResultOK {
 			return nil
 		}
-		return errors.Errorf("pod %s %s", pod.Name, remaining)
+		return fmt.Errorf("pod %s %s", pod.Name, remaining)
 	}
-	return errors.Errorf("pod %s did not output expected line: %s", pod.Name, PodResultPrefix)
+	return fmt.Errorf("pod %s did not output expected line: %s", pod.Name, PodResultPrefix)
 }
 
 func (o *Options) waitForJobCompleteOrPodRunning(client kubernetes.Interface, ns, selector, jobName string) (bool, *corev1.Pod, error) {
@@ -331,18 +331,18 @@ func (o *Options) waitForJobCompleteOrPodRunning(client kubernetes.Interface, ns
 	for {
 		complete, job, err := o.checkIfJobComplete(client, ns, jobName)
 		if err != nil {
-			return false, nil, errors.Wrapf(err, "failed to check for Job %s complete", jobName)
+			return false, nil, fmt.Errorf("failed to check for Job %s complete: %w", jobName, err)
 		}
 		if complete {
 			if job != nil && !jobs.IsJobSucceeded(job) {
-				return true, nil, errors.Errorf("job %s failed", jobName)
+				return true, nil, fmt.Errorf("job %s failed", jobName)
 			}
 			return true, nil, nil
 		}
 
 		pod, err := pods.GetRunningPodForSelector(client, ns, selector)
 		if err != nil {
-			return false, pod, errors.Wrapf(err, "failed to query ready pod in namespace %s with selector %s", ns, selector)
+			return false, pod, fmt.Errorf("failed to query ready pod in namespace %s with selector %s: %w", ns, selector, err)
 		}
 		if pod != nil {
 			status := pods.PodStatus(pod)
@@ -356,7 +356,7 @@ func (o *Options) waitForJobCompleteOrPodRunning(client kubernetes.Interface, ns
 		}
 
 		if time.Now().After(o.timeEnd) {
-			return false, nil, errors.Errorf("timed out after waiting for duration %s", o.Duration.String())
+			return false, nil, fmt.Errorf("timed out after waiting for duration %s", o.Duration.String())
 		}
 		time.Sleep(o.PollPeriod)
 	}
@@ -365,7 +365,7 @@ func (o *Options) waitForJobCompleteOrPodRunning(client kubernetes.Interface, ns
 func (o *Options) checkIfJobComplete(client kubernetes.Interface, ns, name string) (bool, *batchv1.Job, error) {
 	job, err := client.BatchV1().Jobs(ns).Get(context.TODO(), name, metav1.GetOptions{})
 	if job == nil || err != nil {
-		return false, nil, errors.Wrapf(err, "failed to list jobList in namespace %s name %s", ns, name)
+		return false, nil, fmt.Errorf("failed to list jobList in namespace %s name %s: %w", ns, name, err)
 	}
 	if jobs.IsJobFinished(job) {
 		if jobs.IsJobSucceeded(job) {
@@ -391,10 +391,10 @@ func (o *Options) pickJobToLog(client kubernetes.Interface, ns, selector string,
 
 	name, err := o.Input.PickNameWithDefault(names, "select the Job to view:", "", "select which job you wish to log")
 	if err != nil {
-		return errors.Wrapf(err, "failed to pick a job name")
+		return fmt.Errorf("failed to pick a job name: %w", err)
 	}
 	if name == "" {
-		return errors.Errorf("no jobs to view. Try add --active to wait for the next job")
+		return fmt.Errorf("no jobs to view. Try add --active to wait for the next job")
 	}
 	return o.viewActiveJobLog(client, ns, selector, name)
 }
@@ -427,7 +427,7 @@ func verifyContainerName(pod *corev1.Pod, name string) error {
 		names = append(names, pod.Spec.Containers[i].Name)
 	}
 	sort.Strings(names)
-	return errors.Errorf("invalid container name %s for pod %s. Available names: %s", name, pod.Name, strings.Join(names, ", "))
+	return fmt.Errorf("invalid container name %s for pod %s. Available names: %s", name, pod.Name, strings.Join(names, ", "))
 }
 
 // GetSortedJobs gets the jobs with an optional commit sha filter
@@ -437,7 +437,7 @@ func GetSortedJobs(client kubernetes.Interface, ns, selector, fieldSelector stri
 		FieldSelector: fieldSelector,
 	})
 	if err != nil && !apierrors.IsNotFound(err) {
-		return nil, errors.Wrapf(err, "failed to list jobList in namespace %s selector %s", ns, selector)
+		return nil, fmt.Errorf("failed to list jobList in namespace %s selector %s: %w", ns, selector, err)
 	}
 
 	answer := jobList.Items
