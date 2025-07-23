@@ -125,8 +125,8 @@ func (o *Options) Run() error {
 			o.OnPod(p)
 			log.Logger().Debugf("added Pod %s", p.Name)
 		},
-		UpdateFunc: func(_, new interface{}) {
-			p := new.(*v1.Pod)
+		UpdateFunc: func(_, obj interface{}) {
+			p := obj.(*v1.Pod)
 			o.OnPod(p)
 			log.Logger().Debugf("updated Pod %s", p.Name)
 		},
