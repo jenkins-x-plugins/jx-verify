@@ -9,7 +9,7 @@ require (
 	github.com/cpuguy83/go-md2man v1.0.10
 	github.com/genkiroid/cert v0.0.0-20230422001211-fe9a3bec009a
 	github.com/jenkins-x/jx-api/v4 v4.8.1
-	github.com/jenkins-x/jx-helpers/v3 v3.9.8
+	github.com/jenkins-x/jx-helpers/v3 v3.10.1
 	github.com/jenkins-x/jx-kube-client/v3 v3.0.8
 	github.com/jenkins-x/jx-logging/v3 v3.1.0
 	github.com/sergi/go-diff v1.1.0
