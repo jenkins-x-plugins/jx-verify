@@ -6,7 +6,7 @@
 [![LICENSE](https://img.shields.io/github/license/jenkins-x-labs/helmboot.svg)](https://github.com/jenkins-x-plugins/jx-verify/blob/master/LICENSE)
 [![Slack Status](https://img.shields.io/badge/slack-join_chat-white.svg?logo=slack&style=social)](https://slack.k8s.io/)
 
-`jx-verify` is a small command line tool for verifying [Jenkins X](https://jenkins-x.io/) installations.
+`jx-verify` is a small command line tool for verifying [JayeX](https://jayex.io/) installations.
 
 ## Commands
 
