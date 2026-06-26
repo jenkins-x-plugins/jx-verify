@@ -95,7 +95,7 @@ func (o *Options) Run() error {
 
 	requirementsResource, requirementsFileName, err := jxcore.LoadRequirementsConfig(o.Dir, false)
 	if err != nil {
-		return fmt.Errorf("failed to load Jenkins X requirements: %w", err)
+		return fmt.Errorf("failed to load JayeX requirements: %w", err)
 	}
 	requirements := &requirementsResource.Spec
 
@@ -111,7 +111,7 @@ func (o *Options) Run() error {
 		}
 		_, err = mail.ParseAddress(requirements.Ingress.TLS.Email)
 		if err != nil {
-			return fmt.Errorf("You must provide a valid email address to enable TLS so you can receive notifications from LetsEncrypt about your certificates: %w", err)
+			return fmt.Errorf("you must provide a valid email address to enable TLS so you can receive notifications from LetsEncrypt about your certificates: %w", err)
 		}
 	}
 

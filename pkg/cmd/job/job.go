@@ -26,7 +26,6 @@ import (
 	"github.com/spf13/cobra"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -168,7 +167,7 @@ func (o *Options) viewActiveJobLog(client kubernetes.Interface, ns, selector, jo
 			return nil
 		}
 		if pod == nil {
-			return fmt.Errorf("No pod found for namespace %s with selector %v", ns, selector)
+			return fmt.Errorf("no pod found for namespace %s with selector %v", ns, selector)
 		}
 
 		if time.Now().After(o.timeEnd) {
@@ -300,7 +299,7 @@ func (o *Options) verifyResultInLastPod(client kubernetes.Interface, ns, selecto
 	}
 
 	// lets get the log of the pod
-	result := podInterface.GetLogs(pod.Name, &v1.PodLogOptions{
+	result := podInterface.GetLogs(pod.Name, &corev1.PodLogOptions{
 		Container: o.ContainerName,
 	}).Do(ctx)
 	data, err := result.Raw()
@@ -350,7 +349,7 @@ func (o *Options) waitForJobCompleteOrPodRunning(client kubernetes.Interface, ns
 				logger.Logger().Infof("pod %s has status %s", termcolor.ColorInfo(pod.Name), termcolor.ColorInfo(status))
 				o.podStatusMap[pod.Name] = status
 			}
-			if pod.Status.Phase == v1.PodRunning || pods.IsPodReady(pod) {
+			if pod.Status.Phase == corev1.PodRunning || pods.IsPodReady(pod) {
 				return false, pod, nil
 			}
 		}
